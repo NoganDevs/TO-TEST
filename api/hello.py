@@ -1,14 +1,14 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from email.mime.text import MIMEText
-import smtplib, random, time, os
+import smtplib, random, time, os, urllib.parse
 
 app = Flask(__name__)
 CORS(app)
 
 # === Config / Secrets ===
 EMAIL_ADDRESS = "orignallinks@gmail.com"
-EMAIL_PASSWORD = "jtbyfkneamirfgvo"  # Gmail App Password (not real password in prod)
+EMAIL_PASSWORD = "jtbyfkneamirfgvo"  # Gmail App Password (use env var in prod)
 
 # === Verification Settings ===
 codes = {}              # In-memory storage
@@ -17,11 +17,37 @@ CODE_TTL = 300          # 5 minutes
 MAX_TRIES = 5
 RESEND_INTERVAL = 30    # Seconds between sends
 
+
+def extract_email():
+    """
+    Extract email from:
+    - URL query like ?email=xxx
+    - Hash format like #email?xxx
+    - JSON body (fallback)
+    """
+    # From query (?email=)
+    email = request.args.get("email")
+    if email:
+        return email
+
+    # From hash-like format (#email?xxx) – browsers don’t send fragment, 
+    # but client JS can forward it as param `hash`
+    raw = request.args.get("hash")
+    if raw and raw.startswith("email?"):
+        return urllib.parse.unquote(raw.split("?", 1)[1])
+
+    # From JSON body
+    if request.is_json:
+        data = request.get_json(silent=True) or {}
+        return data.get("email")
+
+    return None
+
+
 # === Routes ===
 @app.route("/api/send-code", methods=["POST"])
 def send_code():
-    data = request.json
-    email = data.get("email")
+    email = extract_email()
     if not email:
         return jsonify({"success": False, "message": "Email required"}), 400
 
@@ -84,8 +110,8 @@ def send_code():
 
 @app.route("/api/verify-code", methods=["POST"])
 def verify_code():
-    data = request.json
-    email = data.get("email")
+    email = extract_email()
+    data = request.json or {}
     code = data.get("code")
     now = time.time()
 
