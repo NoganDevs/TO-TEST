@@ -1,8 +1,9 @@
 {
-  "rewrites": [
-    {
-      "source": "/greet",
-      "destination": "/api/hello"
-    }
+  "version": 2,
+  "builds": [
+    { "src": "server.py", "use": "@vercel/python" }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "server.py" }
   ]
 }
