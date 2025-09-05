@@ -21,8 +21,8 @@ RESEND_INTERVAL = 30    # Seconds between sends
 def extract_email():
     """
     Extract email from:
-    - URL query like ?email=xxx
-    - Hash format like #email?xxx
+    - Query (?email=xxx)
+    - Hash-like format (#email?xxx) sent by frontend as `hash`
     - JSON body (fallback)
     """
     # From query (?email=)
@@ -30,8 +30,7 @@ def extract_email():
     if email:
         return email
 
-    # From hash-like format (#email?xxx) – browsers don’t send fragment, 
-    # but client JS can forward it as param `hash`
+    # From custom hash (#email?xxx) → client must send `hash=email?xxx`
     raw = request.args.get("hash")
     if raw and raw.startswith("email?"):
         return urllib.parse.unquote(raw.split("?", 1)[1])
