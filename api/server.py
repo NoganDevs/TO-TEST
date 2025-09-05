@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from email.mime.text import MIMEText
-import smtplib, random, time, os, urllib.parse
+import smtplib, random, time, os, urllib.parse, string, secrets
 
 app = Flask(__name__)
 CORS(app)
@@ -19,28 +19,34 @@ RESEND_INTERVAL = 30    # Seconds between sends
 
 
 def extract_email():
-    """
-    Extract email from:
-    - Query (?email=xxx)
-    - Hash-like format (#email?xxx) sent by frontend as `hash`
-    - JSON body (fallback)
-    """
-    # From query (?email=)
+    """Extract email from query, hash-like format, or JSON body"""
     email = request.args.get("email")
     if email:
         return email
 
-    # From custom hash (#email?xxx) → client must send `hash=email?xxx`
     raw = request.args.get("hash")
     if raw and raw.startswith("email?"):
         return urllib.parse.unquote(raw.split("?", 1)[1])
 
-    # From JSON body
     if request.is_json:
         data = request.get_json(silent=True) or {}
         return data.get("email")
 
     return None
+
+
+def generate_code(length=6):
+    """Generate random alphanumeric verification code"""
+    chars = string.ascii_uppercase + string.digits + string.ascii_lowercase
+    return "".join(random.choice(chars) for _ in range(length))
+
+
+def generate_token():
+    """Generate secure random tokens after verification"""
+    key1 = secrets.token_hex(8)        # 16-char hex
+    key2 = secrets.token_urlsafe(12)   # ~16-char URL safe
+    token = secrets.token_urlsafe(32)  # long secure token
+    return key1, key2, token
 
 
 # === Routes ===
@@ -69,8 +75,8 @@ def send_code():
                 "expires_in": int(existing["expires"] - now)
             })
 
-    # Generate code
-    code = str(random.randint(100000, 999999))
+    # Generate alphanumeric code
+    code = generate_code()
     codes[email] = {
         "code": code,
         "expires": now + CODE_TTL,
@@ -130,8 +136,16 @@ def verify_code():
         codes[email]["tries"] += 1
         return jsonify({"success": False, "message": "Incorrect code"}), 400
 
+    # Verified → issue tokens
     del codes[email]
-    return jsonify({"success": True, "message": "Email verified successfully"})
+    key1, key2, token = generate_token()
+    return jsonify({
+        "success": True,
+        "message": "Email verified successfully",
+        "key1": key1,
+        "key2": key2,
+        "token": token
+    })
 
 
 if __name__ == "__main__":
